@@ -9,7 +9,7 @@ booking through a FastAPI web app.
 Because live GIGM / Air Peace / Wakanow feeds aren't publicly available (and scraping
 real carrier sites is fragile and often blocked), the ingestion stage produces
 **realistic synthetic fare trajectories**. Every downstream stage — normalization,
-modeling, serving, UI — is real and production-shaped, so you can swap the synthetic
+modeling, serving, UI - is real and production-shaped, so you can swap the synthetic
 generator for real Kafka source connectors without touching the rest.
 
 ## Quick start
