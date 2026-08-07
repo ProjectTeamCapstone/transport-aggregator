@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NaijaFare — Multi-Modal Travel Aggregator</title>
+<style>
+  :root { --accent:#1f4e79; --bg:#f4f6f9; --card:#fff; --line:#e3e8ef; --muted:#667; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:#1a2230; }
+  header { background:var(--accent); color:#fff; padding:20px 24px; }
+  header h1 { margin:0; font-size:22px; }
+  header p { margin:4px 0 0; opacity:.85; font-size:13px; }
+  .wrap { max-width:920px; margin:0 auto; padding:22px 16px 60px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:18px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  label { font-size:12px; color:var(--muted); display:block; margin-bottom:4px; }
+  select,input { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:14px; background:#fff; }
+  .row { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; align-items:end; }
+  .row .full { grid-column:1 / -1; }
+  button { background:var(--accent); color:#fff; border:0; padding:10px 16px; border-radius:8px; font-size:14px; cursor:pointer; }
+  button:hover { background:#163a5c; }
+  .nl { display:flex; gap:8px; }
+  .nl input { flex:1; }
+  .muted { color:var(--muted); font-size:13px; }
+  table { width:100%; border-collapse:collapse; margin-top:8px; }
+  th,td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); font-size:14px; }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+  .mode { font-size:11px; padding:2px 7px; border-radius:20px; font-weight:600; }
+  .air { background:#e7f0ff; color:#1f4e79; }
+  .road { background:#eafaf0; color:#1a7a44; }
+  .price { font-weight:700; }
+  .pill { font-size:11px; padding:3px 8px; border-radius:20px; font-weight:600; white-space:nowrap; }
+  .hi { background:#fdecec; color:#c0392b; }
+  .mid { background:#fff5e0; color:#b8860b; }
+  .lo { background:#eafaf0; color:#1a7a44; }
+  .book { padding:6px 12px; font-size:13px; }
+  .examples span { cursor:pointer; color:var(--accent); text-decoration:underline; margin-right:12px; font-size:13px; }
+  .badge { display:inline-block; background:#eef3f9; color:var(--accent); border-radius:6px; padding:2px 8px; font-size:12px; margin-left:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>NaijaFare <span style="opacity:.7;font-weight:400;">— a Skyscanner for Nigeria</span></h1>
+  <p>Real-time multi-modal fares across road &amp; air carriers, with a 24-hour price-rise forecast.</p>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <label>Ask in plain English</label>
+    <div class="nl">
+      <input id="nlq" placeholder="e.g. cheapest Lagos to Abuja tomorrow morning" />
+      <button onclick="nlSearch()">Search</button>
+    </div>
+    <div class="examples" style="margin-top:10px;">
+      <span onclick="ex('cheapest Lagos to Abuja next week')">cheapest Lagos → Abuja next week</span>
+      <span onclick="ex('fastest flight from Lagos to London')">fastest flight to London</span>
+      <span onclick="ex('cheapest bus Lagos to Onitsha')">cheapest bus to Onitsha</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div><label>From</label><select id="origin"></select></div>
+      <div><label>To</label><select id="destination"></select></div>
+      <div><label>Date (optional)</label><input type="date" id="date" /></div>
+      <div><label>Mode</label><select id="mode">
+        <option value="">Any</option><option value="air">Air</option><option value="road">Road</option>
+      </select></div>
+      <div><label>Sort</label><select id="sort">
+        <option value="cheapest">Cheapest</option><option value="fastest">Fastest</option>
+      </select></div>
+    </div>
+    <div style="margin-top:12px;"><button onclick="doSearch()">Search fares</button>
+      <span id="modelbadge" class="badge"></span></div>
+  </div>
+
+  <div id="parsed" class="muted"></div>
+  <div id="results"></div>
+</div>
+
+<script>
+const NGN = n => "₦" + Number(n).toLocaleString("en-NG");
+const HH  = h => String(h).padStart(2,"0") + ":00";
+const DUR = m => Math.floor(m/60) + "h " + (m%60) + "m";
+function probPill(p){
+  const pct = Math.round(p*100);
+  const cls = p>=0.6 ? "hi" : p>=0.4 ? "mid" : "lo";
+  return `<span class="pill ${cls}">${pct}% ↑ 24h</span>`;
+}
+
+let DEST_MAP = {};                 // origin city -> [destination cities]
+const CODES = {"Lagos":"LOS","Abuja":"ABV","Onitsha":"ONI","Port Harcourt":"PHC","London":"LON"};
+const NAME_OF = Object.fromEntries(Object.entries(CODES).map(([k,v])=>[v,k]));
+
+// The destinations named in the project: Lagos return legs to these cities.
+const STATED_DESTINATIONS = ["Abuja", "London", "Onitsha", "Port Harcourt"];
+
+// Refill the destination dropdown to match the currently-selected origin.
+// Falls back to the stated project destinations if routes weren't loaded.
+function fillDestinations(){
+  const o = document.getElementById("origin"), d = document.getElementById("destination");
+  const originCity = NAME_OF[o.value];
+  let dests = (DEST_MAP[originCity] || []).slice().sort();
+  if(!dests.length) dests = STATED_DESTINATIONS.slice();
+  d.innerHTML = "";
+  dests.forEach(c=>{ d.innerHTML += `<option value="${CODES[c]}">${c}</option>`; });
+}
+
+async function loadRoutes(){
+  const o = document.getElementById("origin"), d = document.getElementById("destination");
+
+  // Build origin -> [destinations] from the available routes; fall back to the
+  // stated project routes (Lagos -> the four named cities) if the API is unreachable.
+  DEST_MAP = {};
+  try {
+    const r = await fetch("/routes").then(x=>x.json());
+    r.forEach(x=>{ (DEST_MAP[x.origin] = DEST_MAP[x.origin] || []).push(x.destination); });
+  } catch(e) { /* offline / not served yet — use the fallback below */ }
+  if(!Object.keys(DEST_MAP).length) DEST_MAP = {"Lagos": STATED_DESTINATIONS.slice()};
+
+  // Populate origins (cities that are an origin of some route).
+  o.innerHTML = "";
+  Object.keys(DEST_MAP).sort().forEach(c=>{
+    o.innerHTML += `<option value="${CODES[c]}">${c}</option>`;
+  });
+  o.onchange = fillDestinations;
+  o.value = "LOS";
+  fillDestinations();  // seed destination list for the default origin
+
+  const m = await fetch("/metrics").then(x=>x.json()).catch(()=>null);
+  if(m && m.auc) document.getElementById("modelbadge").textContent =
+    `model AUC ${m.auc} · acc ${(m.accuracy*100).toFixed(0)}%`;
+}
+
+function render(data){
+  document.getElementById("parsed").innerHTML = data.parsed
+    ? `Understood as: <b>${data.parsed.sort}</b> ${data.parsed.origin||"?"} → ${data.parsed.destination||"any"}${data.parsed.date?(" on "+data.parsed.date):""}${data.parsed.mode?(" ("+data.parsed.mode+")"):""}`
+    : "";
+  const res = data.results || [];
+  if(!res.length){ document.getElementById("results").innerHTML =
+    `<div class="card muted">No fares match. Try a different route/date, or clear the date.</div>`; return; }
+  let html = `<div class="card"><table><thead><tr>
+    <th>Carrier</th><th>Mode</th><th>Depart</th><th>Duration</th><th>Price</th><th>Forecast</th><th></th></tr></thead><tbody>`;
+  res.forEach(x=>{
+    html += `<tr>
+      <td>${x.carrier}</td>
+      <td><span class="mode ${x.mode}">${x.mode}</span></td>
+      <td>${x.departure_date}<br><span class="muted">${HH(x.departure_hour)}</span></td>
+      <td>${DUR(x.duration_min)}</td>
+      <td class="price">${NGN(x.price_ngn)}</td>
+      <td>${probPill(x.rise_prob)}<br><span class="muted">${x.advice}</span></td>
+      <td><button class="book" onclick='book(${JSON.stringify(x.trip_id)})'>Book</button></td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  document.getElementById("results").innerHTML = html;
+}
+
+function showError(msg){
+  document.getElementById("results").innerHTML =
+    `<div class="card" style="border-color:#e0a0a0;">
+       <b style="color:#c0392b;">Search failed</b>
+       <p class="muted" style="margin:6px 0 0;">${msg}</p>
+     </div>`;
+}
+
+// Fetch JSON with clear errors when the server is unreachable or returns non-200.
+async function getJSON(url, opts){
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch(e){
+    showError("Can't reach the server. Make sure it's running (<code>python run_all.py</code>) "
+      + "and open the app at <b>http://127.0.0.1:8000</b> &mdash; not by double-clicking the HTML file.");
+    return null;
+  }
+  if(!res.ok){
+    let detail = res.status + " " + res.statusText;
+    try { const j = await res.json(); if(j.detail) detail = j.detail; } catch(e){}
+    showError("The server returned an error (" + detail + "). "
+      + "If the model isn't trained yet, run <code>python run_all.py</code> first.");
+    return null;
+  }
+  return res.json();
+}
+
+async function doSearch(){
+  const $ = id => document.getElementById(id);
+  const p = new URLSearchParams({
+    origin: $("origin").value,
+    destination: $("destination").value,
+    sort: $("sort").value,
+  });
+  if($("date").value) p.set("date", $("date").value);
+  if($("mode").value) p.set("mode", $("mode").value);
+  const data = await getJSON("/search?"+p);
+  if(data) render(data);
+}
+async function nlSearch(){
+  const q = document.getElementById("nlq").value;
+  const data = await getJSON("/search/nl",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({q})});
+  if(data) render(data);
+}
+function ex(t){ document.getElementById("nlq").value=t; nlSearch(); }
+async function book(trip_id){
+  const r = await fetch("/book",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({trip_id})}).then(x=>x.json());
+  alert(`✅ ${r.status.toUpperCase()}\nRef: ${r.booking_ref}\n${r.carrier} — ${NGN(r.price_ngn)}\n\n${r.note}`);
+}
+loadRoutes();
+</script>
+</body>
+</html>
