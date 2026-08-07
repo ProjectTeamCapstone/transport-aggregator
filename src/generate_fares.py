@@ -49,6 +49,13 @@ CAPTURE_HORIZON_DAYS = 30      # we start watching each trip 30 days out
 DEPARTURES_PER_ROUTE = 14      # distinct departure dates per route/carrier
 
 
+def base_for(mode: str, route: tuple[str, str]) -> tuple[float, int]:
+    """Base price/duration for a route, falling back to the reverse leg's
+    figures when only the outbound direction is in BASE (return fares mirror
+    the outbound ones)."""
+    return BASE.get((mode, route)) or BASE[(mode, (route[1], route[0]))]
+
+
 def carrier_bias(carrier: str) -> float:
     """Each carrier sits a little above/below the market — deterministic per name."""
     random.seed(hash(carrier) % (2**31))
@@ -93,7 +100,7 @@ def build():
     rows_by_carrier: dict[str, list[dict]] = {}
 
     def add_carrier_route(carrier, mode, route):
-        base_price, duration = BASE[(mode, route)]
+        base_price, duration = base_for(mode, route)
         base_price *= (1 + carrier_bias(carrier))
         rows = rows_by_carrier.setdefault(carrier, [])
         for _ in range(DEPARTURES_PER_ROUTE):
@@ -120,13 +127,16 @@ def build():
                     "price_ngn": price,
                 })
 
+    # Every route is bookable in both directions (outbound + return leg).
     for c in ROAD_CARRIERS:
-        for r in ROAD_ROUTES:
-            add_carrier_route(c, "road", r)
+        for o, d in ROAD_ROUTES:
+            add_carrier_route(c, "road", (o, d))
+            add_carrier_route(c, "road", (d, o))
     for c in AIR_CARRIERS:
         routes = AIR_INTL if c == "British Airways" else AIR_DOMESTIC
-        for r in routes:
-            add_carrier_route(c, "air", r)
+        for o, d in routes:
+            add_carrier_route(c, "air", (o, d))
+            add_carrier_route(c, "air", (d, o))
 
     total = 0
     for carrier, rows in rows_by_carrier.items():
