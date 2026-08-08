@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "src/api.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     },
     {
@@ -13,7 +13,7 @@
   "routes": [
     {
       "src": "/(routes|metrics|search|search/nl|book)",
-      "dest": "src/api.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/(.*)",
