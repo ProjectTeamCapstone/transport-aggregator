@@ -1,0 +1,19 @@
+{
+  "auc": 0.641,
+  "accuracy": 0.7353,
+  "base_rate": 0.5818,
+  "n_train": 8551,
+  "n_test": 2138,
+  "best_iteration": 11,
+  "feature_importance_gain": {
+    "days_to_departure": 2148.8,
+    "price_trend_3d": 1570.6,
+    "price_ngn": 1198.9,
+    "duration_min": 616.1,
+    "price_vs_route_med": 311.3,
+    "departure_hour": 186.4,
+    "dow": 183.6,
+    "carrier_rank": 129.6,
+    "is_air": 0.0
+  }
+}
