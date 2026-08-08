@@ -17,7 +17,8 @@ generator for real Kafka source connectors without touching the rest.
 ```bash
 pip install -r requirements.txt
 python run_all.py            # generate -> normalize -> train -> serve on :8000
-# then open http://127.0.0.1:8000
+# then open http://127.0.0.1:8000 (this is link to currenlty run on our local machine)
+# Plan to move the frontend to streamlit ot vercel
 ```
 
 Build the data + model without starting the server:
