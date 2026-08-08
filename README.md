@@ -14,13 +14,13 @@ generator for real Kafka source connectors without touching the rest.
 
 ## Quick start
 
-# frontend deployed on vercel https://transport-aggregator-gp3.vercel.app/
+## frontend deployed on vercel https://transport-aggregator-gp3.vercel.app/
 
 
 ```bash
 pip install -r requirements.txt
 python run_all.py            # generate -> normalize -> train -> serve on :8000
-# then open http://127.0.0.1:8000 (this is link to currenlty run on our local machine)
+# then open http://127.0.0.1:8000 (for running on local machine)
 ```
 
 Build the data + model without starting the server:
