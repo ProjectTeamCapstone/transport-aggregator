@@ -12,15 +12,13 @@ real carrier sites is fragile and often blocked), the ingestion stage produces
 modeling, serving, UI - is real and production-shaped, so you can swap the synthetic
 generator for real Kafka source connectors without touching the rest.
 
-## Quick start (local)
+## Quick start
 
 ```bash
-# 1. Install ALL dependencies (runtime + training)
-pip install -r requirements-dev.txt
-
-# 2. Build the data + train the LightGBM model, then serve on :8000
-python run_all.py
-# open http://127.0.0.1:8000
+pip install -r requirements.txt
+python run_all.py            # generate -> normalize -> train -> serve on :8000
+# then open http://127.0.0.1:8000 (this is link to currenlty run on our local machine)
+# frontend deployed on vercel # https://transport-aggregator-cyan.vercel.app/
 ```
 
 Build the data + model without starting the server:
@@ -29,33 +27,6 @@ Build the data + model without starting the server:
 python run_all.py --no-serve
 python src/api.py            # start the API separately
 ```
-
-> **Note:** `requirements.txt` is deliberately minimal (runtime-only) so the Vercel
-> serverless build is fast and reliable. For local development/training use
-> `requirements-dev.txt` (it includes `requirements.txt` plus pandas/numpy/scikit-learn/lightgbm).
-
-## Deploying to Vercel
-
-The app is configured to deploy as **one serverless FastAPI function** (`api/index.py`)
-that serves both the JSON API **and** the single-page UI. The generated DB + model are
-committed and bundled into the function (see `vercel.json` `includeFiles`).
-
-1. Make sure the checked-in `data/aggregator.db` and `models/` are up to date
-   (run `python run_all.py --no-serve` locally, then commit the outputs).
-2. Deploy:
-
-   ```bash
-   npm i -g vercel
-   vercel --prod
-   ```
-
-3. Verify after deploy:
-   - `https://<your-app>.vercel.app/health` → `{"status":"ok","db":true}`
-   - `https://<your-app>.vercel.app/routes` → list of available routes
-   - `https://<your-app>.vercel.app/` → the search UI (talks to the API on the same domain)
-
-Because the frontend uses relative URLs (`/search`, `/routes`, ...), the deployed UI
-calls the backend automatically — no CORS or hardcoded domain needed.
 
 ## Pipeline stages
 
@@ -114,7 +85,13 @@ real fare feeds would re-fit the same pipeline.)
 transport_aggregator/
 ├── run_all.py            # one-command end-to-end runner
 ├── requirements.txt
+├── vercel.json
 ├── README.md
+└── api/
+|    └── index.py  
+└── data/
+|    ├── raw
+|    └── models
 └── src/
     ├── generate_fares.py # stage 1 — synthetic per-carrier feeds
     ├── normalize.py      # stage 2 — unify into canonical offers
