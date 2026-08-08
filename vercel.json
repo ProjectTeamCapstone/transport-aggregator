@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/api.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "src/ui/index.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(routes|metrics|search|search/nl|book)",
+      "dest": "src/api.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "src/ui/index.html"
+    }
+  ]
+}
