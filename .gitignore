@@ -4,6 +4,4 @@ __pycache__/
 
 # generated pipeline output (reproducible via `python run_all.py`)
 data/raw/
-data/*.db
 data/*.db-journal
-models/
