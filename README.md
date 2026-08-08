@@ -18,7 +18,7 @@ generator for real Kafka source connectors without touching the rest.
 pip install -r requirements.txt
 python run_all.py            # generate -> normalize -> train -> serve on :8000
 # then open http://127.0.0.1:8000 (this is link to currenlty run on our local machine)
-# frontend deployed on vercel # https://transport-aggregator-cyan.vercel.app/
+# frontend deployed on vercel # (https://transport-aggregator-gp3.vercel.app/)
 ```
 
 Build the data + model without starting the server:
