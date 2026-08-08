@@ -1,9 +1,5 @@
-pandas>=2.0
-numpy>=1.24
-scikit-learn>=1.3
-lightgbm>=4.0
+# Runtime dependencies (installed by Vercel for the FastAPI serverless function).
+# Kept minimal so Vercel builds quickly and reliably.
 fastapi>=0.110
 uvicorn>=0.27
 pydantic>=2.0
-# optional: enables Claude-powered NL parsing (set USE_CLAUDE=1 + ANTHROPIC_API_KEY), this is under consideration
-# anthropic>=0.34

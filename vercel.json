@@ -5,11 +5,7 @@
       "src": "api/index.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "data/**",
-          "models/**",
-          "src/**"
-        ]
+        "includeFiles": ["data/**", "models/**", "src/**"]
       }
     },
     {
@@ -19,7 +15,7 @@
   ],
   "routes": [
     {
-      "src": "/(routes|metrics|search|search/nl|book)",
+      "src": "/(routes|metrics|search|search/nl|book|health)",
       "dest": "api/index.py"
     },
     {
