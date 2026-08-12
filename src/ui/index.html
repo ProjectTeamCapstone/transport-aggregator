@@ -429,9 +429,10 @@
           <option value="road">Road</option>
         </select>
       </div>
-      <div>
+<div>
         <label for="sort">Sort</label>
         <select id="sort">
+          <option value="time" selected>Date &amp; time</option>
           <option value="cheapest">Cheapest</option>
           <option value="fastest">Fastest</option>
         </select>
@@ -568,11 +569,11 @@ function showError(msg){
 // Fetch JSON with clear errors when the server is unreachable or returns non-200.
 async function getJSON(url, opts){
   let res;
-  try {
+try {
     res = await fetch(url, opts);
   } catch(e){
-    showError("Can't reach the server. Make sure it's running (<code>python run_all.py</code>) "
-      + "and open the app at <b>http://127.0.0.1:8000</b> &mdash; not by double-clicking the HTML file.");
+    showError("Can't reach the API server. Locally, run <code>python run_all.py</code> and "
+      + "open <b>http://127.0.0.1:8000</b>. On a deployed site, ensure the backend function is live.");
     return null;
   }
   if(!res.ok){
