@@ -38,13 +38,7 @@ app = FastAPI(title="Skyscanner-for-Nigeria — Multi-Modal Aggregator", version
 
 
 def db():
-    # Open read-only so the app works on Vercel's read-only serverless filesystem.
-    # Falls back to a normal connection on writable local filesystems.
-    uri = f"file:{DB_PATH}?mode=ro"
-    try:
-        con = sqlite3.connect(uri, uri=True)
-    except sqlite3.OperationalError:
-        con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
     return con
 
@@ -108,12 +102,7 @@ def _search(origin, destination, date, sort, mode, part_of_day=None, limit=10):
         lo, hi = nl_search.PART_OF_DAY[part_of_day]
         q += " AND departure_hour BETWEEN ? AND ?"
         args += [lo, hi]
-    if sort == "time":
-        order = "departure_date ASC, departure_hour ASC"
-    elif sort == "fastest":
-        order = "duration_min ASC"
-    else:
-        order = "price_ngn ASC"
+    order = "duration_min ASC" if sort == "fastest" else "price_ngn ASC"
     q += f" ORDER BY {order} LIMIT ?"
     args.append(limit)
     try:
@@ -130,7 +119,7 @@ def search(
     origin: Optional[str] = Query(None),
     destination: Optional[str] = Query(None),
     date: Optional[str] = Query(None),
-    sort: str = Query("time"),
+    sort: str = Query("cheapest"),
     mode: Optional[str] = Query(None),
     limit: int = Query(10, le=50),
 ):

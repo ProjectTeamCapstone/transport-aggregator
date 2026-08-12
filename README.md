@@ -1,4 +1,4 @@
-# NaijaFare — Multi-Modal Ticketing & Dynamic Pricing (Project 03)
+# NaijaFare Multi-Modal Ticketing & Dynamic Pricing (Project 03)
 
 A **runnable, end-to-end reference implementation** of the "Skyscanner for Nigeria"
 aggregator: it ingests fares from multiple road and air carriers, unifies them into
@@ -8,17 +8,20 @@ booking through a FastAPI web app.
 
 Because live GIGM / Air Peace / Wakanow feeds aren't publicly available (and scraping
 real carrier sites is fragile and often blocked), the ingestion stage produces
-**realistic synthetic fare trajectories**. Every downstream stage — normalization,
+**realistic synthetic fare trajectories**. Every downstream stage: normalization,
 modeling, serving, UI - is real and production-shaped, so you can swap the synthetic
 generator for real Kafka source connectors without touching the rest.
 
 ## Quick start
 
+## Application Test page
+## frontend for testing deployed on vercel https://transport-aggregator-gp3.vercel.app/
+
+
 ```bash
 pip install -r requirements.txt
 python run_all.py            # generate -> normalize -> train -> serve on :8000
-# then open http://127.0.0.1:8000 (this is link to currenlty run on our local machine)
-# frontend deployed on vercel # https://transport-aggregator-cyan.vercel.app/
+# then open http://127.0.0.1:8000 (for running on local machine)
 ```
 
 Build the data + model without starting the server:
@@ -85,13 +88,7 @@ real fare feeds would re-fit the same pipeline.)
 transport_aggregator/
 ├── run_all.py            # one-command end-to-end runner
 ├── requirements.txt
-├── vercel.json
 ├── README.md
-└── api/
-|    └── index.py  
-└── data/
-|    ├── raw
-|    └── models
 └── src/
     ├── generate_fares.py # stage 1 — synthetic per-carrier feeds
     ├── normalize.py      # stage 2 — unify into canonical offers
