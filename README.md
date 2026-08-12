@@ -1,4 +1,4 @@
-# NaijaFare — Multi-Modal Ticketing & Dynamic Pricing (Project 03)
+# NaijaFare Multi-Modal Ticketing & Dynamic Pricing (Project 03)
 
 A **runnable, end-to-end reference implementation** of the "Skyscanner for Nigeria"
 aggregator: it ingests fares from multiple road and air carriers, unifies them into
@@ -8,13 +8,14 @@ booking through a FastAPI web app.
 
 Because live GIGM / Air Peace / Wakanow feeds aren't publicly available (and scraping
 real carrier sites is fragile and often blocked), the ingestion stage produces
-**realistic synthetic fare trajectories**. Every downstream stage — normalization,
+**realistic synthetic fare trajectories**. Every downstream stage: normalization,
 modeling, serving, UI - is real and production-shaped, so you can swap the synthetic
 generator for real Kafka source connectors without touching the rest.
 
 ## Quick start
 
-## frontend deployed on vercel https://transport-aggregator-gp3.vercel.app/
+## Application Test page
+## frontend for testing deployed on vercel https://transport-aggregator-gp3.vercel.app/
 
 
 ```bash
