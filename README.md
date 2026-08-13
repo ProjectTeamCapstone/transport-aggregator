@@ -1,100 +1,111 @@
-# NaijaFare Multi-Modal Ticketing & Dynamic Pricing (Project 03)
+# Multi-Modal Ticketing & Dynamic Pricing Aggregator
 
-A **runnable, end-to-end reference implementation** of the "Skyscanner for Nigeria"
-aggregator: it ingests fares from multiple road and air carriers, unifies them into
-a single `offers` feed, predicts whether each fare will **rise in the next 24 hours**
-with a LightGBM model, and serves cheapest/fastest search + natural-language search +
-booking through a FastAPI web app.
+"Skyscanner for Nigeria". For a route and date it returns the **cheapest** and
+**fastest** options across 8 road and air carriers, predicts whether the price
+will **rise in the next 24 hours**, and books — or hands you a pre-filled
+carrier checkout.
 
-Because live GIGM / Air Peace / Wakanow feeds aren't publicly available (and scraping
-real carrier sites is fragile and often blocked), the ingestion stage produces
-**realistic synthetic fare trajectories**. Every downstream stage: normalization,
-modeling, serving, UI - is real and production-shaped, so you can swap the synthetic
-generator for real Kafka source connectors without touching the rest.
+DAT 608 capstone project
 
-## Quick start
+> **All prices are simulated.** No public fare API exists for Nigerian carriers
+> without a paid credential, so the project's own simulator drives all eight.
+> The model's accuracy describes the simulator, not Nigeria.
 
-## Application Test page
-## frontend for testing deployed on https://transport-aggregator-group3.vercel.app/
+---
 
+## Requirements
+
+Docker + Compose, **Python 3.12**, **~8 GB free RAM** (Kafka, ksqlDB and Connect
+are JVMs). Node 22 for the web app. The dashboard needs R, which is optional —
+nothing else depends on it:
 
 ```bash
+sudo apt-get install -y r-base-core libpq-dev \
+    r-cran-shiny r-cran-dbi r-cran-ggplot2 r-cran-dplyr
+sudo Rscript -e 'install.packages("RPostgres", repos="https://cloud.r-project.org")'
+```
+
+Take shiny/ggplot2/dplyr from apt — from source they compile for ~20 minutes.
+
+## Setup
+
+```bash
+git clone https://github.com/nunclud/naijafare/e
+
+cd /naijafare
+
+cp .env.example .env                   # works with no API keys
 pip install -r requirements.txt
-python run_all.py            # generate -> normalize -> train -> serve on :8000
-# then open http://127.0.0.1:8000 (for running on local machine)
+pip install -r requirements-ml.txt     # optional, large: enables /predict
+
+./scripts/bootstrap.sh                 # 6 containers, topics, ksqlDB, sinks
+                                       # first run also BUILDS the Connect image (~5 min)
+python -m simulator.run --once         # 2,280 prices — wait ~20s for the sinks
+python -m ml.backfill                  # optional: history so /predict works
 ```
 
-Build the data + model without starting the server:
+`bootstrap.sh` is idempotent — re-run it whenever the stack is cold. The trained
+model ships in `ml/artifacts/`, so no retraining is needed.
+
+## Run
 
 ```bash
-python run_all.py --no-serve
-python src/api.py            # start the API separately
+python -m uvicorn api.main:app --port 8000 --workers 4
+(cd ui && npm install && npm run dev)                  # :5173
+Rscript -e "shiny::runApp('dashboard', port=3838)"     # :3838
 ```
 
-## Pipeline stages
+Use `--workers 4` — ranking is CPU-bound Python. On a remote server add
+`--host 0.0.0.0`, or tunnel:
+`ssh -L 5173:localhost:5173 -L 8000:localhost:8000 -L 3838:localhost:3838 user@server`
 
-| Stage | File | Production equivalent |
-|---|---|---|
-| 1. Ingest fares | `src/generate_fares.py` | Per-carrier **Kafka source connectors** (REST poll + Scrapy/Playwright scrapers), one topic per carrier |
-| 2. Normalize | `src/normalize.py` | **ksqlDB** stream queries unifying carrier topics into one `offers` topic, sunk to **PostgreSQL** |
-| 3. Model | `src/train_model.py` + `src/features.py` | **LightGBM** "price will rise in 24h" classifier, distributed with **Ray**, tracked in MLflow |
-| 4. Serve | `src/api.py` + `src/ui/` | **FastAPI** search + booking-orchestrator, **Redis**-cached reads, **React/Streamlit + R Shiny** UI, **Anthropic Claude** for NL search |
+## Try it
 
-The prototype uses **SQLite** in place of PostgreSQL+Redis so it runs with zero setup;
-the schema and SQL are Postgres-compatible.
+```bash
+curl "localhost:8000/search?origin=LOS&dest=ABV&limit=3"
+curl "localhost:8000/search/nl?q=cheapest+way+to+Abuja+next+week"
+```
 
-## API endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/` | Search web UI |
-| GET | `/health` | Readiness check |
-| GET | `/routes` | Available routes |
-| GET | `/metrics` | Model AUC / accuracy / feature importance |
-| GET | `/search?origin=LOS&destination=ABV&sort=cheapest&mode=air` | Structured search |
-| POST | `/search/nl` `{"q":"cheapest Lagos to Abuja tomorrow morning"}` | Natural-language search |
-| POST | `/book` `{"trip_id":"..."}` | Simulated carrier booking |
-
-## The model
-
-Target: for each fare snapshot, **will the price be higher at the next daily snapshot (~24h)?**
-Features: current price, days-to-departure, duration, departure hour, day-of-week,
-mode (air/road), price relative to the route median, recent 3-snapshot price trend,
-and carrier cheapness rank. A time-aware 80/20 split trains LightGBM; the latest
-snapshot per trip is scored and written to a `predictions` table the API serves.
-
-Typical run: **AUC ≈ 0.63, accuracy ≈ 69%** on held-out data, with `days_to_departure`
-and `price_trend_3d` the dominant features — i.e. fares are most predictable close to
-departure and when they already have upward momentum. (These are synthetic-data numbers;
-real fare feeds would re-fit the same pipeline.)
-
-## Plugging in real data
-
-1. Replace `generate_fares.py` with Kafka source connectors / scrapers that write the
-   same raw columns per carrier.
-2. Point `normalize.py` (and `AGG_DB`) at PostgreSQL instead of SQLite.
-3. Add a scheduler (cron/Airflow) to re-run stages 1–3 on an interval; keep stage 4 running.
-4. Set `USE_CLAUDE=1` and `ANTHROPIC_API_KEY` to route NL search through Anthropic Claude
-   (see `src/nl_search.py:parse_with_claude`).
-
-## Config
-
-- `AGG_DB` — path to the SQLite DB (default `data/aggregator.db`). Set this if your
-  filesystem doesn't support SQLite locking (e.g. some network mounts).
+API docs at **/docs**. In the web app: search `cheapest way to Abuja next week`,
+check **Fastest** (a flight's door-to-door time vs its time in the air), then
+press **Book** twice — you get the same booking back, never two.
 
 ## Layout
 
-```
-transport_aggregator/
-├── run_all.py            # one-command end-to-end runner
-├── requirements.txt
-├── README.md
-└── src/
-    ├── generate_fares.py # stage 1 — synthetic per-carrier feeds
-    ├── normalize.py      # stage 2 — unify into canonical offers
-    ├── features.py       # shared feature engineering + label
-    ├── train_model.py    # stage 3 — LightGBM training + scoring
-    ├── nl_search.py      # NL query parser (Claude-ready)
-    ├── api.py            # stage 4 — FastAPI service
-    └── ui/index.html     # single-page search UI
-```
+| | |
+|---|---|
+| `common/` | Places, carriers, config, canonical schema, normalisation |
+| `simulator/` | The data source — **there is no `connectors/` folder** |
+| `stream/` | ksqlDB statements (one per carrier) + 2 Kafka Connect sinks |
+| `api/` | `/search` `/search/nl` `/offer/{id}` `/predict` `/book` `/health` |
+| `booking/` | Idempotency ledger, Duffel sandbox, deep links |
+| `ml/` | Features, training, backfill, trained model |
+| `ui/` `dashboard/` | React app; R Shiny dashboard (reads PostgreSQL directly) |
+| `schemas/` `infra/` `scripts/` | Offer contract; Postgres init + Connect image; bootstrap |
+
+Runtime code only — tests, session reports and design docs are kept separately.
+
+## Two design points
+
+**Booking can never happen twice.** The idempotency key is written to PostgreSQL
+*before* any carrier is called, so a lost reply leaves a booking `unknown`
+rather than duplicated. Four states: `pending` (handed to the carrier's
+checkout — no seat held; the final answer for 6 of 8 carriers), `confirmed`,
+`failed`, `unknown` (never retried automatically).
+
+**Payment is structurally impossible.** The booking client can only request a
+hold, refuses fares needing instant payment, rejects a live API token at
+startup, and returns 422 for a request carrying card details.
+
+## Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| `pull access denied for naijafares-connect` | Old Docker Compose ignoring `pull_policy: build`. Run `docker compose build connect` first |
+| `bootstrap.sh`: "only N/6 healthy" | Not enough RAM, or a port is taken — `docker compose ps` |
+| `/search` returns `count: 0` | No prices yet — `python -m simulator.run --once`, wait ~20s |
+| `/health`: `redis: down` | Containers not up — re-run `./scripts/bootstrap.sh` |
+| `/predict` 503 | Missing ML packages, or no history (`python -m ml.backfill`) |
+| `/predict` 404 | That offer has no recorded history yet |
+| `Rscript: command not found` | R not installed — see Requirements. Dashboard only; nothing else is blocked |
+| "Price may be out of date" | Working as designed — stale prices are shown and labelled, never hidden |
