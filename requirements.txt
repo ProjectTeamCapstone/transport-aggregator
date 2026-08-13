@@ -1,9 +1,36 @@
-pandas>=2.0
-numpy>=1.24
-scikit-learn>=1.3
-lightgbm>=4.0
-fastapi>=0.110
-uvicorn>=0.27
-pydantic>=2.0
-# optional: enables Claude-powered NL parsing (set USE_CLAUDE=1 + ANTHROPIC_API_KEY), this is under consideration
-# anthropic>=0.34
+# Core dependencies. Pinned for reproducibility.
+# Grows phase by phase; ML-only deps live in requirements-ml.txt so the
+# baseline install stays fast.
+
+# --- Kafka client -----------------------------------------------------------
+confluent-kafka==2.6.1
+
+# --- Datastores -------------------------------------------------------------
+redis==5.2.1
+psycopg[binary]==3.2.3
+
+# --- HTTP / config ----------------------------------------------------------
+requests==2.32.3
+httpx==0.28.1
+python-dotenv==1.0.1
+
+# --- Schema / validation ----------------------------------------------------
+jsonschema==4.23.0
+pydantic==2.10.4
+
+# --- Reporting (end-of-session PDF, a graded deliverable) -------------------
+reportlab==4.2.5
+
+# --- Testing ----------------------------------------------------------------
+pytest==8.3.4
+pytest-asyncio==0.25.0
+
+# --- API (Phase 3) ----------------------------------------------------------
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+fastavro==1.9.7
+
+# --- UI / dashboard (Phase 6) -----------------------------------------------
+# React app: see ui/package.json (npm install)
+# R Shiny dashboard: conda install -c conda-forge r-base r-shiny r-dbi r-rpostgres r-ggplot2 r-dplyr
+anthropic==0.121.0

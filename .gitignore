@@ -1,7 +1,66 @@
-.venv/
-__pycache__/
-*.pyc
+# Secrets - never commit
+.env
+*.pem
+*.key
 
-# generated pipeline output (reproducible via `python run_all.py`)
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ML
+# mlruns holds every experiment run and grows without bound - not committed.
+# ml/artifacts IS committed: the trained model is a named project deliverable
+# and the LightGBM text format is small and diffable.
+mlruns/
+mlartifacts/
+*.pkl
+*.joblib
+
+# Node / React
+node_modules/
+ui/build/
+ui/dist/
+
+# R
+.Rproj.user/
+.Rhistory
+
+# Data dumps
 data/raw/
-data/*.db-journal
+data/interim/
+*.db
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Studio-specific junk that must not enter the repo
+.cursor-server
+.vscode-server
+.windsurf-server
+.claude/
+.cache/
+.config/
+.npm/
+.ipython/
+.jupyter/
+.copilot/
+.dotnet/
+.lightning_studio/
+.claude.json
+.zcompdump
+.zsh_history
+.wget-hsts
+
+# Failure drill: uvicorn log from the API the drill starts and stops itself.
+.drill_api.log
+
+web

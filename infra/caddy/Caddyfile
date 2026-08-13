@@ -1,0 +1,56 @@
+# Caddy is the only thing on this box listening to the public internet.
+#
+# It exists to reproduce, in production, exactly what Vite's dev proxy does in
+# development (see ui/vite.config.js): serve the UI and the API from ONE origin,
+# with /api stripped before it reaches FastAPI. ui/src/api.js calls a relative
+# `/api`, so if this file is right the frontend needs no build-time API URL, no
+# CORS headers, and no code change between laptop and server.
+#
+# `handle_path` (not `handle`) is what strips the prefix. It is the direct
+# equivalent of  rewrite: p => p.replace(/^\/api/, '')  in the Vite config.
+# Getting this wrong gives 404s on every call that works fine locally.
+#
+# SITE_ADDRESS is set in /etc/caddy/caddy.env, e.g.
+#   SITE_ADDRESS=naijafares.uksouth.cloudapp.azure.com
+# Caddy obtains and renews the TLS certificate for that name automatically.
+
+{$SITE_ADDRESS} {
+	encode gzip
+
+	# --- The API ----------------------------------------------------------
+	# /api/search -> 127.0.0.1:8000/search
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# --- The R Shiny analytics dashboard ----------------------------------
+	# Caddy proxies Shiny's websocket automatically; no extra config needed.
+	# Shiny's own assets are requested relatively, so a stripped prefix
+	# normally works. If you see 404s on shared/ or __assets__/ after
+	# deploying, do not fight it at a subpath - give the dashboard its own
+	# DNS label and a second site block. That is ten minutes; debugging
+	# Shiny sub-path routing is not.
+	handle_path /dashboard/* {
+		reverse_proxy 127.0.0.1:3838
+	}
+
+	# --- Everything else: the built React app -----------------------------
+	# The web root is DELIBERATELY not /srv/naijafares/ui. That is the repo's
+	# source directory, and serving it would publish src/, package.json,
+	# vite.config.js and node_modules/ to the internet. Deploy the UI with:
+	#
+	#     cd /srv/naijafares/ui && npm ci && npm run build
+	#     sudo rm -rf /srv/naijafares/web && sudo mkdir -p /srv/naijafares/web
+	#     sudo cp -r dist/. /srv/naijafares/web/
+	#
+	# rm -rf first: Vite fingerprints filenames, so stale assets accumulate.
+	handle {
+		root * /srv/naijafares/web
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output file /var/log/caddy/naijafares.log
+	}
+}

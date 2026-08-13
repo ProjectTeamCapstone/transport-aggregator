@@ -1,0 +1,25 @@
+{
+  "name": "offers-to-redis",
+  "config": {
+    "connector.class": "com.redis.kafka.connect.RedisSinkConnector",
+    "topics": "offers",
+    "tasks.max": "1",
+    "redis.uri": "redis://redis:6379",
+    "//key": "redis.key is a PREFIX, not a full template: the connector substitutes ${topic} and then appends the record key itself. ${key} is not a placeholder - leaving it in produced literal keys like 'offers:${key}:gigm-road-...'. With '${topic}' the keys read 'offers:<offer_id>'. The record key comes from the transforms below, because offers has no Kafka message key: the canonical contract defines offer_id as a field in the message body.",
+    "transforms": "liftKey,unwrapKey",
+    "transforms.liftKey.type": "org.apache.kafka.connect.transforms.ValueToKey",
+    "transforms.liftKey.fields": "offer_id",
+    "transforms.unwrapKey.type": "org.apache.kafka.connect.transforms.ExtractField$Key",
+    "transforms.unwrapKey.field": "offer_id",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+    "//errors": "tolerance=none deliberately. The earlier schemaless attempt discarded every record while reporting success, which took far longer to diagnose than a loud failure would have.",
+    "errors.tolerance": "none",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "true",
+    "redis.type": "HASH",
+    "redis.key": "${topic}",
+    "//type": "redis.type, NOT redis.command - the connector silently ignores unknown properties, so an earlier redis.command:HSET was dropped and it used its default (STREAM), writing every offer into one Redis stream instead of a key each. HASH writes each offer as its own hash; overwriting in place IS the 'latest price per offer' behaviour Redis is here for."
+  }
+}
