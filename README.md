@@ -19,6 +19,9 @@ Docker + Compose, **Python 3.12**, **~8 GB free RAM** (Kafka, ksqlDB and Connect
 are JVMs). Node 22 for the web app. The dashboard needs R, which is optional —
 nothing else depends on it:
 
+# url
+# https://naijafares.switzerlandnorth.cloudapp.azure.com/
+
 ```bash
 sudo apt-get install -y r-base-core libpq-dev \
     r-cran-shiny r-cran-dbi r-cran-ggplot2 r-cran-dplyr
