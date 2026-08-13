@@ -30,9 +30,7 @@ Take shiny/ggplot2/dplyr from apt — from source they compile for ~20 minutes.
 ## Setup
 
 ```bash
-git clone https://github.com/nunclud/naijafare/e
-
-cd /naijafare
+git clone https://ProjectTeamCapstone/transport-aggregator
 
 cp .env.example .env                   # works with no API keys
 pip install -r requirements.txt
