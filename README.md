@@ -15,7 +15,7 @@ generator for real Kafka source connectors without touching the rest.
 ## Quick start
 
 ## Application Test page
-## frontend for testing deployed on vercel https://transport-aggregator-gp3.vercel.app/
+## frontend for testing deployed on https://transport-aggregator-group3.vercel.app/
 
 
 ```bash
