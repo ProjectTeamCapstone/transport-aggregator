@@ -1,0 +1,28 @@
+# Machine-learning dependencies (Phase 4).
+#
+# Kept separate from requirements.txt on purpose: these are large - LightGBM,
+# pandas, NumPy and MLflow together are several hundred megabytes - and nothing
+# in the stream layer, the API's search path or the booking layer needs them.
+# Someone who only wants to run the pipeline and search should not have to wait
+# for them.
+#
+#     pip install -r requirements.txt        # stack, API, booking, tests
+#     pip install -r requirements-ml.txt     # adds training and /predict
+#
+# Without these installed the system still runs; GET /predict returns 503 with
+# an explanation rather than crashing, and the ML tests skip.
+
+-r requirements.txt
+
+# --- model ------------------------------------------------------------------
+lightgbm==4.5.0
+scikit-learn==1.6.0
+
+# --- data handling ----------------------------------------------------------
+pandas==2.2.3
+numpy==2.5.2
+pyarrow==18.1.0
+
+# --- experiment tracking ----------------------------------------------------
+# Writes to ./mlruns. View with: mlflow ui --backend-store-uri ./mlruns
+mlflow==2.19.0
