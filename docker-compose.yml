@@ -1,0 +1,221 @@
+# Multi-Modal Ticketing & Dynamic Pricing Aggregator - core infrastructure
+#
+# All image versions are PINNED. Do not use :latest anywhere.
+# Kafka runs in KRaft mode (no Zookeeper) to save one container and ~500MB RAM,
+# which matters because the whole stack must fit on a single laptop.
+#
+# JVM heaps are capped deliberately. Left unbounded, Kafka + ksqlDB will each
+# claim 25% of host RAM and starve the rest of the stack.
+
+name: naijafares
+
+services:
+  # ---------------------------------------------------------------- Kafka ---
+  # The "conveyor belt". Every connector publishes price data here; every
+  # downstream service reads from it.
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: naijafares-kafka
+    hostname: kafka
+    ports:
+      # Loopback-only. Every host-side client (connectors, API, tests) runs on
+      # the same machine, and containers reach each other on kafka:29092 over
+      # the Docker network, so binding 0.0.0.0 buys nothing and would publish an
+      # unauthenticated broker the moment this runs on a VM. See docs/deployment.md.
+      - "127.0.0.1:9092:9092"   # host-facing listener (Python connectors, tests)
+    environment:
+      # --- KRaft (Kafka's built-in consensus; replaces Zookeeper) ---
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # Two listeners: one for traffic inside the Docker network (29092),
+      # one for traffic from the host machine (9092). Both are needed.
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+
+      # --- single-node sizing: replication factor must be 1 ---
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"   # topics are created explicitly, see scripts/create_topics.sh
+      KAFKA_LOG_RETENTION_HOURS: 168             # 7 days of raw price history on the belt
+
+      KAFKA_HEAP_OPTS: "-Xmx1G -Xms512M"
+    healthcheck:
+      # Broker is only "healthy" once it can actually answer an API request.
+      # Probe 9092, not 29092: the internal listener binds to the hostname
+      # kafka:29092, so localhost:29092 is not connectable from inside the
+      # container. Only the host listener binds 0.0.0.0.
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    restart: unless-stopped
+
+  # --------------------------------------------------------------- ksqlDB ---
+  # The stream-processing layer. Turns each carrier's messy raw feed into the
+  # one canonical offer shape, using exactly one statement per carrier.
+  ksqldb-server:
+    image: confluentinc/ksqldb-server:0.29.0
+    container_name: naijafares-ksqldb
+    hostname: ksqldb-server
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8088:8088"
+    environment:
+      KSQL_LISTENERS: http://0.0.0.0:8088
+      KSQL_BOOTSTRAP_SERVERS: kafka:29092
+      KSQL_KSQL_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      KSQL_KSQL_SERVICE_ID: naijafares_
+      KSQL_KSQL_STREAMS_REPLICATION_FACTOR: 1
+      KSQL_KSQL_INTERNAL_TOPIC_REPLICAS: 1
+      KSQL_KSQL_LOGGING_PROCESSING_STREAM_AUTO_CREATE: "true"
+      KSQL_KSQL_LOGGING_PROCESSING_TOPIC_AUTO_CREATE: "true"
+      KSQL_KSQL_QUERY_PULL_TABLE_SCAN_ENABLED: "true"
+      KSQL_HEAP_OPTS: "-Xmx1G -Xms512M"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8088/healthcheck >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 45s
+    restart: unless-stopped
+
+  # ------------------------------------------------------ Schema Registry ---
+  # Stores the structure of each `offers` message. Without it the Connect sinks
+  # have no way to know what a record contains: the JDBC sink cannot map fields
+  # to columns, and the Redis sink cannot find a key. See docs/decisions.md D-009.
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.1
+    container_name: naijafares-schema-registry
+    hostname: schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+      SCHEMA_REGISTRY_HEAP_OPTS: "-Xmx512M -Xms256M"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/subjects >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- Redis ---
+  # Fast in-memory store holding ONLY the latest price per carrier/route/date.
+  # This is what makes /search answer in well under 100ms.
+  redis:
+    image: redis:7.2-alpine
+    container_name: naijafares-redis
+    hostname: redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  # ----------------------------------------------------------- PostgreSQL ---
+  # Append-only price history. This is the training data for the ML model and
+  # the source the R Shiny dashboard reads directly.
+  postgres:
+    image: postgres:16-alpine
+    container_name: naijafares-postgres
+    hostname: postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-naijafares}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-naijafares_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-naijafares}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-naijafares} -d ${POSTGRES_DB:-naijafares}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+
+  # -------------------------------------------------------- Kafka Connect ---
+  # Moves data OUT of the offers topic into the two stores. Built from
+  # infra/connect/Dockerfile because the base image ships no connectors.
+  connect:
+    image: naijafares-connect:7.6.1
+    build: ./infra/connect
+    # Build it, never try to pull it. This image name exists only on the machine
+    # that built it, so without this Compose asks Docker Hub for it on a fresh
+    # machine and fails with "pull access denied". The `image:` line only names
+    # the result of the build.
+    pull_policy: build
+    container_name: naijafares-connect
+    hostname: connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8083:8083"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:29092
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: naijafares-connect
+      CONNECT_CONFIG_STORAGE_TOPIC: _connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: _connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: _connect-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      # offers is Avro, so records arrive as typed Structs. That is what lets
+      # the JDBC sink map fields to columns and the Redis sink find its key.
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+      KAFKA_HEAP_OPTS: "-Xmx768M -Xms256M"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  kafka-data:
+  redis-data:
+  postgres-data:

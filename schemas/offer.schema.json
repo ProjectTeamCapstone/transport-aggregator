@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://naijafares.local/schemas/offer.schema.json",
+  "title": "Canonical Offer",
+  "description": "The one shape every offer must have after ksqlDB, regardless of which carrier or ingestion method it came from. Every connector is validated against this by the shared contract test.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "offer_id",
+    "carrier",
+    "mode",
+    "origin",
+    "destination",
+    "depart_time",
+    "duration_min",
+    "price_ngn",
+    "seats_left",
+    "booking_url",
+    "fetched_at"
+  ],
+  "properties": {
+    "offer_id": {
+      "type": "string",
+      "pattern": "^[a-z]+-(road|air)-[A-Z]{3}-[A-Z]{3}-[0-9]{8}T[0-9]{4}Z$",
+      "description": "ADDITIVE FIELD (see docs/decisions.md D-002). Deterministic composite of carrier_key-mode-origin-destination-departureInstantUTC, e.g. 'gigm-road-LOS-ABV-20260914T0600Z'. Stable across refreshes so repeated observations of the SAME physical departure join together - this is what makes GET /offer/{id}, GET /predict?offer_id=, and the price-delta features possible. A readable composite rather than a hash because ksqlDB has no SHA-256 function and a wrong id should be diagnosable by reading it."
+    },
+    "carrier": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 40,
+      "description": "Carrier name exactly as it appears in the carrier registry, e.g. GIGM, Air Peace."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["road", "air"],
+      "description": "Transport mode. Drives the door-to-door duration model used by the Fastest ranking."
+    },
+    "origin": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "3-letter place code. IATA where one exists (LOS, ABV, PHC, LHR); internal code where none exists (ONI = Onitsha, road only). See places.py."
+    },
+    "destination": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "3-letter place code, same registry as origin."
+    },
+    "depart_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Departure in the ORIGIN's local time with an explicit UTC offset, e.g. 2026-09-14T07:00:00+01:00. Offset-aware always - a naive timestamp is a contract violation. Offset-aware means the instant is unambiguous while the wall-clock time still reads correctly to a traveller."
+    },
+    "duration_min": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4320,
+      "description": "Total journey duration in minutes. Capped at 72h to catch unit errors (seconds mistaken for minutes)."
+    },
+    "price_ngn": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 100000000,
+      "description": "Total price in Nigerian Naira. ALL sources are converted to NGN at ingestion - GBP fares on the London route are converted using the FX module, never stored in GBP."
+    },
+    "seats_left": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000,
+      "description": "Seats remaining. 0 is valid (sold out). Where a carrier does not publish this, the connector sets it from its documented default and records that in the data-source matrix rather than inventing a number."
+    },
+    "booking_url": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where the user is sent to complete the booking - a Duffel sandbox reference or a pre-filled carrier deep link."
+    },
+    "fetched_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this observation was collected, in UTC (Z suffix). Drives the staleness flag on /search."
+    }
+  }
+}

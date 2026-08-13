@@ -1,0 +1,31 @@
+{
+  "name": "offers-to-postgres",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "topics": "offers",
+    "tasks.max": "1",
+
+    "//connection": "stringtype=unspecified lets PostgreSQL infer the column type from the value. Without it the driver sends depart_time and fetched_at as VARCHAR and Postgres refuses to put them in TIMESTAMPTZ columns.",
+    "//credentials": "{{...}} markers are filled from .env by stream/deploy_connectors.py, so no real password is ever written to this file. The host stays literally 'postgres': Connect runs inside the Docker network, where POSTGRES_HOST (localhost) would not resolve.",
+    "connection.url": "jdbc:postgresql://postgres:5432/{{POSTGRES_DB}}?stringtype=unspecified",
+    "connection.user": "{{POSTGRES_USER}}",
+    "connection.password": "{{POSTGRES_PASSWORD}}",
+
+    "table.name.format": "offers_history",
+    "auto.create": "false",
+    "auto.evolve": "false",
+
+    "//idempotency": "Kafka delivers at least once, so the same observation WILL arrive twice. upsert on (offer_id, fetched_at) turns the second delivery into a no-op update instead of a duplicate row. Without this the model would train on price history that never happened.",
+    "insert.mode": "upsert",
+    "pk.mode": "record_value",
+    "pk.fields": "offer_id,fetched_at",
+
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+
+    "errors.tolerance": "none",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "true"
+  }
+}

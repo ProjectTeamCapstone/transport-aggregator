@@ -1,0 +1,85 @@
+:root { --ink:#14213d; --muted:#5b6472; --line:#d6dae0; --bg:#f7f8fa;
+        --green:#1b7f4c; --amber:#b37a00; --red:#b3261e; --accent:#0b5fa5; }
+* { box-sizing:border-box; }
+body { margin:0; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       color:var(--ink); background:var(--bg); }
+.app { max-width:880px; margin:0 auto; padding:32px 20px 64px; }
+.app__head h1 { margin:0 0 4px; font-size:28px; }
+.app__head p { margin:0 0 24px; color:var(--muted); }
+.search { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; }
+.search__modes { display:flex; gap:16px; margin-bottom:12px; }
+.link { background:none; border:0; padding:0 0 3px; cursor:pointer; color:var(--muted);
+        border-bottom:2px solid transparent; font-size:14px; }
+.link--active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.search__row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+.search__text { flex:1 1 320px; padding:11px 12px; font-size:16px;
+                border:1px solid var(--line); border-radius:8px; }
+.search__row label { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted); }
+.search__row select, .search__row input[type=date] { padding:9px 10px; font-size:15px;
+                border:1px solid var(--line); border-radius:8px; }
+.btn { padding:11px 18px; border-radius:8px; font-size:15px; cursor:pointer;
+       border:1px solid transparent; text-decoration:none; display:inline-block; }
+.btn--primary { background:var(--accent); color:#fff; }
+.btn--primary:disabled { background:#9db8d0; cursor:not-allowed; }
+.btn--ghost { background:#fff; border-color:var(--line); color:var(--ink); }
+.understood { margin:16px 0 4px; color:var(--muted); font-size:15px; }
+.tabs { display:flex; align-items:center; gap:8px; margin:24px 0 12px; }
+.tab { padding:8px 16px; border:1px solid var(--line); background:#fff;
+       border-radius:999px; cursor:pointer; font-size:15px; }
+.tab--active { background:var(--ink); color:#fff; border-color:var(--ink); }
+.results__count { margin-left:auto; color:var(--muted); font-size:14px; }
+.results__list { display:flex; flex-direction:column; gap:12px; }
+.offer { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; }
+.offer__head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.offer__head h3 { margin:0; font-size:17px; }
+.mode { font-size:12px; padding:3px 9px; border-radius:999px; font-weight:600; }
+.mode--road { background:#e7f1ea; color:var(--green); }
+.mode--air { background:#e7eef7; color:var(--accent); }
+.offer__facts { display:flex; gap:28px; flex-wrap:wrap; margin:14px 0 0; }
+.offer__facts div { display:flex; flex-direction:column; }
+.offer__facts dt { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+.offer__facts dd { margin:2px 0 0; font-size:16px; }
+.offer__facts small { color:var(--muted); font-size:13px; }
+.offer__price { font-weight:700; font-size:19px; }
+.offer__actions { display:flex; gap:10px; align-items:center; margin-top:16px; flex-wrap:wrap; }
+.badge { font-size:13px; padding:5px 11px; border-radius:999px; }
+.badge--rise { background:#fdecea; color:var(--red); }
+.badge--steady { background:#e7f1ea; color:var(--green); }
+.badge--unsure { background:#fff3d1; color:var(--amber); }
+.badge--unknown, .badge--stale { background:#f0f1f3; color:var(--muted); }
+.notice { background:#fff; border:1px solid var(--line); border-left:4px solid var(--muted);
+          border-radius:8px; padding:12px 14px; color:var(--muted); }
+.notice--stale { border-left-color:var(--amber); margin-bottom:12px; }
+.notice--error { border-left-color:var(--red); color:var(--ink); margin:16px 0; }
+.notice__hint { color:var(--muted); font-size:14px; margin:6px 0 0; }
+
+/* --- booking ------------------------------------------------------------- */
+/* The panel takes over the whole action row once opened, so a half-filled
+   booking form is never sitting next to a Book button that looks pressable. */
+.booking { flex:1 1 100%; border:1px solid var(--line); border-radius:8px;
+           padding:14px; background:#fbfbfc; }
+.booking__note { margin:0 0 12px; font-size:14px; color:var(--muted); }
+.booking__fields { display:flex; gap:12px; flex-wrap:wrap; }
+.booking__fields label { display:flex; flex-direction:column; gap:4px; flex:1 1 150px;
+                         font-size:12px; color:var(--muted); text-transform:uppercase;
+                         letter-spacing:.03em; }
+.booking__fields input { border:1px solid var(--line); border-radius:6px; padding:9px 10px;
+                         font-size:15px; color:var(--ink); text-transform:none;
+                         letter-spacing:normal; }
+.booking__actions { display:flex; gap:10px; margin-top:14px; }
+.booking__error { color:var(--red); font-size:14px; margin:12px 0 0; }
+
+.booking-result { flex:1 1 100%; border:1px solid var(--line); border-left-width:4px;
+                  border-radius:8px; padding:14px; background:#fff; }
+.booking-result p { margin:6px 0 0; font-size:14px; }
+.booking-result a { margin-top:12px; display:inline-block; }
+.booking-result--confirmed { border-left-color:var(--green); }
+.booking-result--pending   { border-left-color:var(--accent); }
+.booking-result--failed    { border-left-color:var(--red); }
+/* Grey, not red: `unknown` is genuinely undecided, and colouring it as a
+   failure would be a claim we cannot support. */
+.booking-result--unknown   { border-left-color:var(--muted); }
+.booking-result__reference code { background:#f0f1f3; padding:2px 7px; border-radius:4px;
+                                  font-size:15px; font-weight:600; }
+.booking-result__prices { color:var(--ink); }
+.booking-result__replay { color:var(--muted); font-style:italic; }
