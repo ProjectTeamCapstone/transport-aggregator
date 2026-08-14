@@ -20,9 +20,9 @@ const PLACES = [
 ]
 
 const TEAM_MEMBERS = [
+  "Warieta Gift Ejovwoke",
   "Ndionu Nnamdi",
   "Ipadeola Ladipo",
-  "Warieta Gift Ejovwoke",
   "Macaulay Emmanuel",
   "Maduechesi Chidiebere",
   "Lasisi Oluwadolapo",
