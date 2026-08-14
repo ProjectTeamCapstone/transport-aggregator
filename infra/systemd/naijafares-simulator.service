@@ -1,0 +1,35 @@
+# The price simulator, sweeping every SIMULATOR_TICK_SECONDS.
+#
+# This is a first-class component, not a fallback hack: it is what keeps the
+# demo producing fresh prices when a live carrier source is flaky, and prices
+# are a pure function of observation time, so a restart continues the history
+# rather than breaking it.
+#
+# Runs without --once, so it loops. Restart=always plus that property means an
+# unattended VM keeps generating history for the ML model between demos.
+
+[Unit]
+Description=NaijaFares price simulator
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=exec
+# Deliberately a placeholder, not a real account name. It must match whoever
+# owns /srv/naijafares on the box you are deploying to AND the account whose
+# Python packages are installed - which differs per machine, so nothing
+# sensible can be shipped here. Set it at install time:
+#   sudo sed -i "s/^User=.*/User=$USER/" /etc/systemd/system/naijafares-*.service
+# Left unset, systemd refuses to start with "Unknown user", which is the point:
+# a real-looking default would start under the wrong account on some machines
+# and fail confusingly on others.
+User=CHANGE_ME
+WorkingDirectory=/srv/naijafares
+EnvironmentFile=/srv/naijafares/.env
+ExecStart=/srv/naijafares/.venv/bin/python -m simulator.run
+Restart=always
+# Longer than the API's: if Kafka is not up yet there is no point hammering it.
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
