@@ -1,0 +1,20 @@
+# Test-only dependencies. Not needed to run the stack.
+#
+#     pip install -r requirements.txt -r requirements-dev.txt
+#     pytest
+#
+# The unit tests need nothing running. The tests marked `integration` need a
+# PostgreSQL and skip without one:
+#
+#     docker compose up -d postgres && pytest
+
+-r requirements.txt
+
+# An in-process Redis that speaks the real protocol, so api/store.py is
+# exercised as written - the SCAN pattern, the pipeline, the string coercion -
+# rather than mocked away.
+fakeredis==2.26.2
+
+# TestClient's HTTP transport. Already pinned in requirements.txt; repeated
+# here because the tests depend on it directly.
+httpx==0.28.1

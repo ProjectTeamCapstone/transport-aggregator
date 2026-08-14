@@ -18,9 +18,8 @@ from typing import Any
 
 import lightgbm as lgb
 import pandas as pd
-import psycopg
 
-from common.config import postgres_dsn
+from common.db import connection
 from ml.features import (
     DELTA_LAGS_HOURS,
     FEATURE_COLUMNS,
@@ -57,8 +56,17 @@ def is_available() -> bool:
 
 
 def _history_for(offer_id: str) -> pd.DataFrame:
-    """This departure's recent observations, most recent last."""
-    with psycopg.connect(postgres_dsn(), connect_timeout=10) as conn:
+    """This departure's recent observations, most recent last.
+
+    Uses the shared pool. `/predict` is a per-request read on the same API
+    process that serves bookings, so it must not open connections the booking
+    path then cannot get - see common/db.py.
+
+    frame_from() is unaffected by the pool's dict_row factory: it names the
+    columns explicitly, and pandas builds the same frame from a list of dicts as
+    from a list of tuples.
+    """
+    with connection() as conn:
         return frame_from(conn.execute(
             f"SELECT {', '.join(HISTORY_COLUMNS)} FROM offers_history "
             "WHERE offer_id = %(offer_id)s "

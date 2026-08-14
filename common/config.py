@@ -36,6 +36,18 @@ def postgres_dsn() -> str:
     )
 
 
+# Connection pool bounds, PER PROCESS. `uvicorn --workers 4` means four pools,
+# so the ceiling against PostgreSQL is 4 x POSTGRES_POOL_MAX - keep the product
+# well under the server's `max_connections` (100 by default). See common/db.py.
+POSTGRES_POOL_MIN = int(_env("POSTGRES_POOL_MIN", "1"))
+POSTGRES_POOL_MAX = int(_env("POSTGRES_POOL_MAX", "8"))
+POSTGRES_CONNECT_TIMEOUT_SECONDS = float(_env("POSTGRES_CONNECT_TIMEOUT_SECONDS", "10"))
+
+
+def redis_url() -> str:
+    return f"redis://{REDIS_HOST}:{REDIS_PORT}"
+
+
 # --- external APIs ----------------------------------------------------------
 RAPIDAPI_KEY = _env("RAPIDAPI_KEY")
 RAPIDAPI_HOST = _env("RAPIDAPI_HOST", "sky-scrapper.p.rapidapi.com")
@@ -90,6 +102,21 @@ SIMULATOR_TICK_SECONDS = int(_env("SIMULATOR_TICK_SECONDS", "300"))
 # between meeting the 100ms search target and missing it sevenfold - see
 # api/store.for_route(). Set to 0 to disable caching entirely.
 ROUTE_CACHE_TTL_SECONDS = float(_env("ROUTE_CACHE_TTL_SECONDS", "5"))
+
+# --- rate limits ------------------------------------------------------------
+# Per client IP. Counters live in Redis, not in the process, because
+# `--workers 4` would otherwise mean four independent allowances and an
+# effective limit four times whatever is configured here.
+#
+# The two limited endpoints are limited for different reasons. /book writes a
+# PostgreSQL row per request before it does anything else, so an unlimited /book
+# is an unauthenticated write to the ledger. /search/nl can call the Anthropic
+# API, so an unlimited one spends money on our key. /search is not limited: it
+# is a cached Redis read and the endpoint the site exists to serve.
+RATE_LIMIT_ENABLED = _env("RATE_LIMIT_ENABLED", "true").lower() != "false"
+RATE_LIMIT_BOOK = _env("RATE_LIMIT_BOOK", "10/minute")
+RATE_LIMIT_NL_SEARCH = _env("RATE_LIMIT_NL_SEARCH", "20/minute")
+RATE_LIMIT_DEFAULT = _env("RATE_LIMIT_DEFAULT", "120/minute")
 
 # --- staleness --------------------------------------------------------------
 # An offer older than this is served with stale=true rather than hidden. Users

@@ -8,6 +8,9 @@ confluent-kafka==2.6.1
 # --- Datastores -------------------------------------------------------------
 redis==5.2.1
 psycopg[binary]==3.2.3
+# Pooling. Without it every ledger write opened its own connection, and one
+# booking opens up to six - see common/db.py.
+psycopg-pool==3.2.4
 
 # --- HTTP / config ----------------------------------------------------------
 requests==2.32.3
@@ -22,6 +25,7 @@ pydantic==2.10.4
 reportlab==4.2.5
 
 # --- Testing ----------------------------------------------------------------
+# Test-only packages live in requirements-dev.txt.
 pytest==8.3.4
 pytest-asyncio==0.25.0
 
@@ -29,6 +33,10 @@ pytest-asyncio==0.25.0
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 fastavro==1.9.7
+# Rate limiting. `limits` is the counting engine, used directly rather than
+# through slowapi - see the docstring in api/ratelimit.py for why the decorator
+# form silently breaks POST /book in this codebase.
+limits==5.8.0
 
 # --- UI / dashboard (Phase 6) -----------------------------------------------
 # React app: see ui/package.json (npm install)

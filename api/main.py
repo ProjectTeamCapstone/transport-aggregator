@@ -16,14 +16,18 @@ Run it with:
 from __future__ import annotations
 
 import re
+import time
 from datetime import date as date_type
 from datetime import datetime, timezone
 from typing import Any
 
 import psycopg
-from fastapi import FastAPI, HTTPException, Query, Response
+import redis
+from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from common import logs
 from common.config import STALE_AFTER_SECONDS, assert_sandbox_only
 from common.normalise import to_utc_instant
 from common.places import PLACES, ROUTES, is_supported_route
@@ -34,11 +38,17 @@ from common.ranking import (
     rank_fastest,
 )
 from common.schema import OfferContractError, validate_offer
+from api.ratelimit import client_key, limiter
 from api.store import OfferStore
 
 # Refuse to start against a live booking API. Payment processing is out of
 # scope, so a live Duffel token is a configuration error, not an option.
 assert_sandbox_only()
+
+# Configured here rather than in each module, because this import runs once per
+# uvicorn worker and covers everything those workers go on to import.
+logs.configure()
+log = logs.get(__name__)
 
 app = FastAPI(
     title="Multi-Modal Ticketing & Dynamic Pricing Aggregator",
@@ -57,14 +67,90 @@ store = OfferStore()
 # Results per list. Enough to be useful, small enough to stay readable.
 DEFAULT_LIMIT = 10
 
+# --------------------------------------------------------- cross-cutting ----
+
+@app.middleware("http")
+async def _limit_and_log(request: Request, call_next):
+    """Rate limit, then serve, then log one line with how long it took.
+
+    Both concerns live in one middleware because the order matters and is
+    easier to see written down once: a rejected request must not reach the
+    handler, and a rejected request must still be logged.
+
+    The duration is the useful field. `/search` has a 100 ms target that the
+    route cache exists to meet (see api/store.for_route), and a target nobody
+    measures in production is a target nobody knows they have missed.
+    """
+    started = time.perf_counter()
+    path = request.url.path
+
+    exceeded = limiter.check(request.method, path, client_key(request))
+    if exceeded is not None:
+        log.warning(
+            "http.rate_limited", extra={"path": path, "limit": str(exceeded)}
+        )
+        response: Response = JSONResponse(
+            status_code=429,
+            content={
+                "detail": (
+                    f"Too many requests to {path}. This endpoint allows "
+                    f"{exceeded}. Wait a moment and try again."
+                )
+            },
+        )
+    else:
+        response = await call_next(request)
+
+    log.info(
+        "http.request",
+        extra={
+            "method": request.method,
+            "path": path,
+            "status": response.status_code,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+        },
+    )
+    return response
+
+
+def _redis_down(exc: redis.RedisError) -> HTTPException:
+    """Redis is the price store, so without it there are no prices to serve.
+
+    A 503 saying so, rather than the bare 500 an uncaught RedisError would
+    produce. This mirrors how POST /book reports an unreachable ledger: name
+    the dependency, say what was and was not done, and do not dress an outage
+    up as an empty result - "no departures found" would send a traveller away
+    believing nothing runs that day.
+    """
+    log.error("redis.unavailable", exc_info=exc)
+    return HTTPException(
+        status_code=503,
+        detail=(
+            "The price store is unreachable, so no prices can be served right "
+            f"now. This is an outage on our side, not an empty result. ({exc})"
+        ),
+    )
+
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    """Liveness plus the one number that says whether the pipeline is feeding us.
+
+    `offers_cached` is read from a counter maintained by the store, NOT by
+    scanning the keyspace. Health is polled on an interval - by Caddy, by a
+    monitor, by whoever is watching a deploy - and an O(keyspace) SCAN on every
+    poll is a self-inflicted load spike on the datastore the endpoint exists to
+    reassure you about.
+    """
     redis_ok = store.ping()
+    counted = store.count_cached() if redis_ok else None
     return {
         "status": "ok" if redis_ok else "degraded",
         "redis": "up" if redis_ok else "down",
-        "offers_cached": store.count() if redis_ok else 0,
+        "offers_cached": counted["count"] if counted else 0,
+        # When the number was last actually measured. Without this the count is
+        # unfalsifiable - you cannot tell a real 2,280 from a stale one.
+        "offers_counted_at": counted["measured_at"] if counted else None,
     }
 
 
@@ -100,7 +186,10 @@ def search(
         )
 
     now = datetime.now(timezone.utc)
-    offers = store.for_route(origin, dest)
+    try:
+        offers = store.for_route(origin, dest)
+    except redis.RedisError as exc:
+        raise _redis_down(exc) from exc
 
     wanted = date.isoformat() if date else None
     if wanted:
@@ -142,6 +231,9 @@ def search_natural_language(
     understood ("Lagos to Abuja on 18 September, cheapest first"). A silent
     misreading is worse than a visible one - the user can correct what they
     can see.
+
+    Rate limited in middleware, because this path can reach the Anthropic API
+    and therefore spends money - see api/ratelimit.py.
     """
     from api import nl_search
 
@@ -261,7 +353,10 @@ class BookingRequest(BaseModel):
 
 
 def _require_offer(offer_id: str) -> dict[str, Any]:
-    offer = store.get(offer_id)
+    try:
+        offer = store.get(offer_id)
+    except redis.RedisError as exc:
+        raise _redis_down(exc) from exc
     if offer is None:
         raise HTTPException(
             status_code=404,
@@ -287,6 +382,9 @@ def create_booking(request: BookingRequest, response: Response) -> dict[str, Any
         failed     a definite no, or we refused (the fare moved)
         unknown    we asked and never heard back, so a ticket may exist. Never
                    retried automatically - that is what could duplicate it.
+
+    Rate limited in middleware, because every call writes a ledger row before
+    it does anything else - see api/ratelimit.py.
     """
     from booking import orchestrator
     from booking.providers import Passenger
@@ -368,7 +466,10 @@ def booking_options(offer_id: str = Query(..., description="e.g. gigm-road-LOS-A
 
 @app.get("/offer/{offer_id}")
 def get_offer(offer_id: str) -> dict[str, Any]:
-    offer = store.get(offer_id)
+    try:
+        offer = store.get(offer_id)
+    except redis.RedisError as exc:
+        raise _redis_down(exc) from exc
     if offer is None:
         raise HTTPException(status_code=404, detail=f"No offer {offer_id!r}")
 
