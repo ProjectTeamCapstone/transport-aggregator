@@ -319,7 +319,7 @@ export default function App() {
               onKeyDown={(e) => e.key === 'Enter' && handleNlSearch(nlQuery)}
             />
             <button className="btn btn--primary" onClick={() => handleNlSearch(nlQuery)} disabled={busy}>
-              {busy ? 'Parsing...' : 'Search'}
+              {busy ? 'Searching...' : 'Search'}
             </button>
           </div>
 
