@@ -352,7 +352,7 @@ export default function App() {
       {/* VIEW 3: About View */}
       {activeTab === 'about' && (
         <section className="search-card">
-          <h3 style={{ marginTop: 0, color: 'var(--wakanow-blue)', fontSize: '1.4rem' }}>About NaijaFare</h3>
+          <h3 style={{ marginTop: 0, color: 'var(--giftwarieta-blue)', fontSize: '1.4rem' }}>About NaijaFare</h3>
           <p style={{ margin: '14px 0 16px', color: 'var(--muted)', lineHeight: '1.7' }}>
             NaijaFare is an intelligent travel expense optimization and price prediction tool designed specifically for Nigerian transit routes.
           </p>
@@ -372,7 +372,7 @@ export default function App() {
       {/* VIEW 4: Team View */}
       {activeTab === 'team' && (
         <section className="search-card">
-          <h3 style={{ marginTop: 0, color: 'var(--wakanow-blue)', fontSize: '1.4rem' }}>Project Team</h3>
+          <h3 style={{ marginTop: 0, color: 'var(--giftwarieta-blue)', fontSize: '1.4rem' }}>Project Team</h3>
           <p style={{ margin: '8px 0 24px', color: 'var(--muted)' }}>
             PAU Data Science & Big Data Capstone Project — <strong>Group 3 Members</strong>
           </p>
