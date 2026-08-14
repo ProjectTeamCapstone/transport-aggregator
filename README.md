@@ -11,7 +11,7 @@ DAT 608 capstone project
 > without a paid credential, so the project's own simulator drives all eight.
 > The model's accuracy describes the simulator, not Nigeria.
 
----
+--------
 
 ## Requirements
 

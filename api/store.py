@@ -12,6 +12,7 @@ than in every caller.
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from typing import Any, Iterator
 
 import redis
@@ -19,6 +20,11 @@ import redis
 from common.config import REDIS_HOST, REDIS_PORT, ROUTE_CACHE_TTL_SECONDS
 
 KEY_PREFIX = "offers"
+
+# How long the /health offer count may go without being re-measured. Longer
+# than the route cache because the number is diagnostic, not a search result,
+# and measuring it costs a full keyspace scan. See count_cached().
+COUNT_TTL_SECONDS = 30.0
 
 # Canonical types. Redis hands back strings; the contract expects numbers.
 _INT_FIELDS = ("duration_min", "seats_left")
@@ -34,6 +40,8 @@ class OfferStore:
         # route -> (read_at_monotonic, offers). See for_route() for why.
         self._cache_ttl = cache_ttl_seconds
         self._cache: dict[tuple[str, str], tuple[float, list[dict[str, Any]]]] = {}
+        # (read_at_monotonic, {"count": int, "measured_at": iso}). See count_cached().
+        self._count: tuple[float, dict[str, Any]] | None = None
 
     def ping(self) -> bool:
         try:
@@ -127,6 +135,46 @@ class OfferStore:
         worse than failing outright.
         """
         self._cache.clear()
+        self._count = None
 
     def count(self) -> int:
+        """Every offer key in Redis. O(keyspace) - see count_cached().
+
+        Kept because it is the only exact answer available: the Kafka Connect
+        sink writes the hashes, so nothing on this side is told when an offer
+        appears or expires, and there is no counter to read instead.
+        """
         return sum(1 for _ in self._scan(f"{KEY_PREFIX}:*"))
+
+    def count_cached(self) -> dict[str, Any] | None:
+        """The offer count, re-measured at most once per COUNT_TTL_SECONDS.
+
+        `/health` is polled on an interval, and count() is a full keyspace SCAN.
+        Answering every poll exactly would mean sweeping the whole keyspace
+        every few seconds - a steady, self-inflicted load on the datastore that
+        the health check exists to reassure you about, and one that grows with
+        the data rather than staying flat.
+
+        The measurement timestamp is returned with the number, because a cached
+        count without one cannot be told apart from a live one. A caller can see
+        the figure is 40 seconds old and judge it accordingly.
+
+        Returns None only when Redis cannot be read at all, which /health
+        already reports through `redis: down`.
+        """
+        now = time.monotonic()
+        if self._count is not None and now - self._count[0] < COUNT_TTL_SECONDS:
+            return self._count[1]
+
+        try:
+            measured = {
+                "count": self.count(),
+                "measured_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+            }
+        except redis.RedisError:
+            return None
+
+        self._count = (now, measured)
+        return measured

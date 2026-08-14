@@ -23,6 +23,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from common import logs
 from booking import ledger
 from booking.ledger import Booking
 from booking.providers import (
@@ -40,6 +41,8 @@ from common.config import (
     STALE_AFTER_SECONDS,
 )
 from common.ranking import annotate
+
+log = logs.get(__name__)
 
 
 class OfferGone(Exception):
@@ -123,6 +126,17 @@ def book(
 
     if live_price > allowed:
         rise_pct = (live_price - quoted_price_ngn) / quoted_price_ngn * 100
+        log.info(
+            "booking.refused_price_moved",
+            extra={
+                "idempotency_key": key,
+                "offer_id": offer["offer_id"],
+                "quoted_ngn": quoted_price_ngn,
+                "live_ngn": live_price,
+                "rise_pct": round(rise_pct, 2),
+                "priced_from_stale_data": enriched["stale"],
+            },
+        )
         booking = ledger.update(
             key,
             state="failed",
@@ -223,6 +237,23 @@ def _attempt(
             result: BookingResult = provider.create(offer, passenger, key)
         except ProviderError as exc:
             last_error = exc
+            # The ledger keeps only the LAST error. The sequence that led there
+            # is what explains an `unknown`, so each attempt is logged as it
+            # fails, with the two flags that decide what happens next.
+            log.warning(
+                "booking.attempt_failed",
+                extra={
+                    "idempotency_key": key,
+                    "carrier": offer["carrier"],
+                    "provider": provider.name,
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                    "ambiguous": exc.ambiguous,
+                    "retryable": exc.retryable,
+                },
+            )
             if not exc.retryable:
                 break
             if attempt < max_attempts:
@@ -233,7 +264,16 @@ def _attempt(
         else:
             return _succeed(key, result, live_price, attempt)
 
-    assert last_error is not None  # the loop only exits here via an exception
+    if last_error is None:
+        # Unreachable: the loop only leaves here via `break` or exhaustion, and
+        # both set last_error. Raised rather than asserted because `python -O`
+        # strips assert statements, and a stripped assert on this path would
+        # turn a logic error into an AttributeError on None one line later -
+        # inside the code that decides whether a ticket might exist.
+        raise RuntimeError(
+            f"booking {key}: attempt loop ended with no result and no error"
+        )
+
     state = "unknown" if last_error.ambiguous else "failed"
     booking = ledger.update(
         key,
