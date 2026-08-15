@@ -20,7 +20,7 @@ are JVMs). Node 22 for the web app. The dashboard needs R, which is optional —
 nothing else depends on it:
 
 # url
-# https://naijafares.switzerlandnorth.cloudapp.azure.com/
+https://naijafares.spaincentral.cloudapp.azure.com/dashboard/
 
 ```bash
 sudo apt-get install -y r-base-core libpq-dev \
