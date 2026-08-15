@@ -19,7 +19,9 @@ Docker + Compose, **Python 3.12**, **~8 GB free RAM** (Kafka, ksqlDB and Connect
 are JVMs). Node 22 for the web app. The dashboard needs R, which is optional —
 nothing else depends on it:
 
-# url
+## Application platfrom
+
+url
 https://naijafares.spaincentral.cloudapp.azure.com/
 
 Dashboard
