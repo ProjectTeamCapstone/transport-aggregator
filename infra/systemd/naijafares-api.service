@@ -1,0 +1,38 @@
+# The public API. Caddy reverse-proxies /api/* here after stripping the prefix.
+#
+# Binds 127.0.0.1 deliberately: nothing outside this box should reach uvicorn
+# directly. Caddy is the only public listener. See docs/deployment.md.
+#
+# Install: sudo cp infra/systemd/*.service /etc/systemd/system/
+#          sudo systemctl daemon-reload
+#          sudo systemctl enable --now naijafares-api
+
+[Unit]
+Description=NaijaFares API (FastAPI)
+# Docker, not just network: Redis and PostgreSQL must exist before the API
+# tries to read them.
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=exec
+# Deliberately a placeholder, not a real account name. It must match whoever
+# owns /srv/naijafares on the box you are deploying to AND the account whose
+# Python packages are installed - which differs per machine, so nothing
+# sensible can be shipped here. Set it at install time:
+#   sudo sed -i "s/^User=.*/User=$USER/" /etc/systemd/system/naijafares-*.service
+# Left unset, systemd refuses to start with "Unknown user", which is the point:
+# a real-looking default would start under the wrong account on some machines
+# and fail confusingly on others.
+User=CHANGE_ME
+WorkingDirectory=/srv/naijafares
+EnvironmentFile=/srv/naijafares/.env
+# The project venv, NOT /usr/bin/python3. A bare `pip install` is blocked on
+# modern Ubuntu (PEP 668), and installing with --user puts the packages where
+# only that account can see them - both end as 'No module named uvicorn' here.
+ExecStart=/srv/naijafares/.venv/bin/python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

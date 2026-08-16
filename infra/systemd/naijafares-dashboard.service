@@ -1,0 +1,33 @@
+# The R Shiny analytics dashboard, proxied by Caddy at /dashboard/*.
+#
+# Reads PostgreSQL directly (dashboard/app.R), so it needs the same .env as the
+# Python services for POSTGRES_*. Binds 127.0.0.1 for the same reason uvicorn
+# does: Caddy is the only public listener.
+#
+# If Shiny's assets 404 behind the /dashboard prefix, do not fight sub-path
+# routing - give the dashboard its own DNS label and a second Caddy site block.
+
+[Unit]
+Description=NaijaFares Shiny dashboard
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=exec
+# Deliberately a placeholder, not a real account name. It must match whoever
+# owns /srv/naijafares on the box you are deploying to AND the account whose
+# Python packages are installed - which differs per machine, so nothing
+# sensible can be shipped here. Set it at install time:
+#   sudo sed -i "s/^User=.*/User=$USER/" /etc/systemd/system/naijafares-*.service
+# Left unset, systemd refuses to start with "Unknown user", which is the point:
+# a real-looking default would start under the wrong account on some machines
+# and fail confusingly on others.
+User=CHANGE_ME
+WorkingDirectory=/srv/naijafares
+EnvironmentFile=/srv/naijafares/.env
+ExecStart=/usr/bin/Rscript -e "shiny::runApp('dashboard', port = 3838, host = '127.0.0.1')"
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

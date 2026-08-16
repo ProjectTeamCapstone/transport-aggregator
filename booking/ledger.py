@@ -33,10 +33,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-import psycopg
-from psycopg.rows import dict_row
+from common import logs
+from common.db import connection
 
-from common.config import postgres_dsn
+log = logs.get(__name__)
 
 STATES = ("pending", "confirmed", "failed", "unknown")
 
@@ -115,10 +115,6 @@ def _as_float(value: Any) -> float | None:
     return None if value is None else float(value)
 
 
-def _connect() -> psycopg.Connection:
-    return psycopg.connect(postgres_dsn(), connect_timeout=10, row_factory=dict_row)
-
-
 def derive_key(offer_id: str, passenger_email: str, quoted_price_ngn: float) -> str:
     """An idempotency key derived from what the request actually asks for.
 
@@ -148,7 +144,7 @@ def claim(
     one gets is_new=True and is allowed to call the carrier. The loser reads
     back the winner's row.
     """
-    with _connect() as conn:
+    with connection() as conn:
         row = conn.execute(
             f"""
             INSERT INTO bookings
@@ -161,6 +157,14 @@ def claim(
         ).fetchone()
 
         if row is not None:
+            log.info(
+                "booking.claimed",
+                extra={
+                    "idempotency_key": idempotency_key,
+                    "offer_id": offer_id,
+                    "carrier": carrier,
+                },
+            )
             return Booking.from_row(row), True
 
         # DO NOTHING returned nothing, so the key was already taken. That is a
@@ -169,7 +173,19 @@ def claim(
             f"SELECT {_RETURNING} FROM bookings WHERE idempotency_key = %s",
             (idempotency_key,),
         ).fetchone()
-        return Booking.from_row(existing), False
+
+    # Worth logging at INFO, not DEBUG: this line IS the double-booking
+    # protection doing its job, and its absence during an incident is as
+    # informative as its presence.
+    log.info(
+        "booking.replayed",
+        extra={
+            "idempotency_key": idempotency_key,
+            "offer_id": offer_id,
+            "state": existing["state"],
+        },
+    )
+    return Booking.from_row(existing), False
 
 
 def update(idempotency_key: str, **fields: Any) -> Booking:
@@ -181,7 +197,7 @@ def update(idempotency_key: str, **fields: Any) -> Booking:
         raise ValueError(f"invalid state {fields['state']!r}; expected one of {STATES}")
 
     assignments = ", ".join(f"{name} = %s" for name in fields)
-    with _connect() as conn:
+    with connection() as conn:
         row = conn.execute(
             f"""
             UPDATE bookings SET {assignments}, updated_at = now()
@@ -192,11 +208,25 @@ def update(idempotency_key: str, **fields: Any) -> Booking:
         ).fetchone()
     if row is None:
         raise KeyError(f"no booking {idempotency_key!r}")
+
+    if "state" in fields:
+        # A state change is the whole story of a booking. Logged with the error
+        # so an `unknown` can be explained without opening the database.
+        log.info(
+            "booking.state_changed",
+            extra={
+                "idempotency_key": idempotency_key,
+                "state": fields["state"],
+                "provider": row["provider"],
+                "attempts": row["attempts"],
+                "last_error": row["last_error"],
+            },
+        )
     return Booking.from_row(row)
 
 
 def get(idempotency_key: str) -> Booking | None:
-    with _connect() as conn:
+    with connection() as conn:
         row = conn.execute(
             f"SELECT {_RETURNING} FROM bookings WHERE idempotency_key = %s",
             (idempotency_key,),
@@ -210,7 +240,7 @@ def for_offer(offer_id: str) -> list[Booking]:
     The double-submit test uses this: after two identical requests there must
     be exactly one row here.
     """
-    with _connect() as conn:
+    with connection() as conn:
         rows = conn.execute(
             f"SELECT {_RETURNING} FROM bookings WHERE offer_id = %s "
             "ORDER BY created_at",
@@ -220,7 +250,7 @@ def for_offer(offer_id: str) -> list[Booking]:
 
 
 def counts_by_state() -> dict[str, int]:
-    with _connect() as conn:
+    with connection() as conn:
         rows = conn.execute(
             "SELECT state, count(*) AS n FROM bookings GROUP BY state"
         ).fetchall()
