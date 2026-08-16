@@ -29,6 +29,31 @@ const TEAM_MEMBERS = [
   "Maduagwuna Onyedikachukwu"
 ]
 
+// Visual icons for transit modes
+const FlightIcon = () => (
+  <svg 
+    width="16" 
+    height="16" 
+    viewBox="0 0 24 24" 
+    fill="currentColor" 
+    style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '6px' }}
+  >
+    <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
+  </svg>
+)
+
+const LuxuryBusIcon = () => (
+  <svg 
+    width="16" 
+    height="16" 
+    viewBox="0 0 24 24" 
+    fill="currentColor" 
+    style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '6px' }}
+  >
+    <path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z" />
+  </svg>
+)
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('home')
 
@@ -53,11 +78,11 @@ export default function App() {
   const [bookingStatus, setBookingStatus] = useState(null)
   const [bookingBusy, setBookingBusy] = useState(false)
 
-  // Check if passenger form is fully filled out
+  // Passenger form validation: all fields must be non-empty strings
   const isPassengerFormValid = Boolean(
-    passenger.given_name.trim() && 
-    passenger.family_name.trim() && 
-    passenger.email.trim()
+    passenger.given_name.trim().length > 0 && 
+    passenger.family_name.trim().length > 0 && 
+    passenger.email.trim().length > 0
   )
 
   useEffect(() => {
@@ -160,7 +185,6 @@ export default function App() {
     setSelectedOffer(offer)
     setBookingStatus(null)
     setBookOption(null)
-    // Reset passenger form on opening modal
     setPassenger({ given_name: '', family_name: '', email: '' })
 
     try {
@@ -177,7 +201,7 @@ export default function App() {
 
   const handleConfirmBooking = async (e) => {
     e.preventDefault()
-    if (!isPassengerFormValid) return
+    if (!isPassengerFormValid || bookingBusy) return
 
     setBookingBusy(true)
     try {
@@ -466,7 +490,22 @@ export default function App() {
                 <article className="offer" key={item.offer_id || idx}>
                   <div className="offer__head">
                     <h3>{item.carrier}</h3>
-                    <span className={`mode ${modeClass}`}>{item.mode}</span>
+                    <span 
+                      className={`mode ${modeClass}`}
+                      style={{ display: 'inline-flex', alignItems: 'center' }}
+                    >
+                      {item.mode === 'road' ? (
+                        <>
+                          <LuxuryBusIcon />
+                          <span>Bus</span>
+                        </>
+                      ) : (
+                        <>
+                          <FlightIcon />
+                          <span>Flight</span>
+                        </>
+                      )}
+                    </span>
                   </div>
 
                   <dl className="offer__facts">
@@ -586,6 +625,7 @@ export default function App() {
                   <input 
                     type="text" 
                     required 
+                    placeholder="Enter given name"
                     style={{ width: '100%', padding: '8px', marginTop: '4px' }}
                     value={passenger.given_name}
                     onChange={(e) => setPassenger({ ...passenger, given_name: e.target.value })}
@@ -597,6 +637,7 @@ export default function App() {
                   <input 
                     type="text" 
                     required 
+                    placeholder="Enter family name"
                     style={{ width: '100%', padding: '8px', marginTop: '4px' }}
                     value={passenger.family_name}
                     onChange={(e) => setPassenger({ ...passenger, family_name: e.target.value })}
@@ -608,6 +649,7 @@ export default function App() {
                   <input 
                     type="email" 
                     required 
+                    placeholder="Enter valid email"
                     style={{ width: '100%', padding: '8px', marginTop: '4px' }}
                     value={passenger.email}
                     onChange={(e) => setPassenger({ ...passenger, email: e.target.value })}
@@ -618,8 +660,12 @@ export default function App() {
                   <button 
                     type="submit" 
                     className="btn btn--primary" 
-                    style={{ flex: 1 }}
-                    disabled={bookingBusy || !isPassengerFormValid}
+                    style={{ 
+                      flex: 1, 
+                      cursor: (!isPassengerFormValid || bookingBusy) ? 'not-allowed' : 'pointer',
+                      opacity: (!isPassengerFormValid || bookingBusy) ? 0.6 : 1
+                    }}
+                    disabled={!isPassengerFormValid || bookingBusy}
                   >
                     {bookingBusy ? 'Processing...' : (bookOption?.books_via_api ? 'Book Ticket' : 'Continue on Carrier Site')}
                   </button>

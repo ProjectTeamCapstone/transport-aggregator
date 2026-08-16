@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'https://naijafares.switzerlandnorth.cloudapp.azure.com',
+        target: 'https://naijafares.spaincentral.cloudapp.azure.com',
         changeOrigin: true,
         secure: true,
       },
