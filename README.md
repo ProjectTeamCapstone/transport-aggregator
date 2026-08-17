@@ -21,10 +21,10 @@ nothing else depends on it:
 
 ## Application platfrom
 
-url
+Application interface url: 
 https://naijafares.spaincentral.cloudapp.azure.com/
 
-Dashboard
+Application Monitoring Dashboard:
 https://naijafares.spaincentral.cloudapp.azure.com/dashboard/
 
 
