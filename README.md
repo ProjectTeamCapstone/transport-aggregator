@@ -1,4 +1,5 @@
-# NaijaFares — Multi-Modal Ticketing & Dynamic Pricing Aggregator
+# NaijaFares — Multi-Modal Ticketing & Dynamic Pricing Aggregator 
+## DAT608 Group 3
 
 You need to be in Abuja on Friday. The flight takes 75 minutes and the coach
 takes twelve hours, so the choice looks obvious — until you add the crawl to
